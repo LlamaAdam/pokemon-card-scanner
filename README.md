@@ -1,40 +1,45 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Pokemon Card Scanner
 
-## Getting Started
+Mobile-first web app: scan a Pokemon card, see raw price, PSA 10 price, and whether it's worth grading.
 
-First, run the development server:
+## Stack
+- Next.js 14 (pages router) + TypeScript
+- Tesseract.js (OCR, browser Web Worker)
+- OpenCV.js (centering + card detection, browser)
+- Vercel serverless for `/api/card` and `/api/psa10`
+- Vercel KV for PSA 10 price cache (24h hit, 1h miss)
 
+## Local setup
 ```bash
+npm install
+cp .env.example .env.local
+# edit .env.local (optional pokemontcg key)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment variables
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+| Var | Required? | What it is |
+|-----|-----------|------------|
+| `POKEMONTCG_API_KEY` | No | Bumps rate limit on pokemontcg.io. Anonymous works for low traffic. |
+| `KV_REST_API_URL` | Prod only | Provided automatically by Vercel when KV is linked. |
+| `KV_REST_API_TOKEN` | Prod only | Provided automatically by Vercel when KV is linked. |
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+## Tests
+```bash
+npm test              # vitest unit + API route tests
+npm run test:e2e      # playwright visual regression (requires dev server)
+```
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+## Deploying to Vercel
+1. Push this repo to GitHub.
+2. Import into Vercel (`vercel.com/new`).
+3. Create a KV store: Vercel dashboard → Storage → Create → KV. Link it to the project. `KV_REST_API_URL` / `KV_REST_API_TOKEN` populate automatically.
+4. Optionally add `POKEMONTCG_API_KEY` in project env vars.
+5. Deploy. The URL Vercel gives you works on iPhone/Android — no app store needed.
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+## Known fragility
+The PSA 10 price comes from scraping pricecharting.com. When they change their HTML, `lib/priceChartingParser.ts` may need a small fix. Parser logic is isolated and fixture-tested, so fixes are localized. If the scraper becomes consistently broken, the fallback is their paid API (~$30/mo).
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Manual QA
+See `docs/manual-qa.md` for the phone-hardware checklist before each release.

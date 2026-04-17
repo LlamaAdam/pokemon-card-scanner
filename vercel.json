@@ -1,0 +1,8 @@
+{
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "functions": {
+    "pages/api/psa10.ts": { "maxDuration": 20 },
+    "pages/api/card.ts": { "maxDuration": 10 }
+  }
+}
