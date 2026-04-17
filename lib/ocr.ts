@@ -56,6 +56,14 @@ const MAX_OCR_DIMENSION = 1600;
 // anything past this is a hung fetch worth surfacing as an error.
 const OCR_TIMEOUT_MS = 90_000;
 
+// Detect-card has to stay well under Firefox's ~5s "slow script" warning.
+// OpenCV.js first-load (8MB WASM from CDN) + Canny + findContours can
+// easily blow past that on a cold cache, so we race against a 3.5s cap and
+// fall back to image-relative cropping if it doesn't finish in time. The
+// fallback crop is still usable — it just wastes a bit of Tesseract's time
+// on non-text pixels.
+const DETECT_CARD_TIMEOUT_MS = 3500;
+
 function fittedDimensions(
   src: { width: number; height: number },
   max: number,
@@ -126,13 +134,22 @@ async function runOcr(
 
   // Try card-relative cropping first. If the card detector finds a rectangle
   // with a plausible card aspect ratio, we get a tight crop of exactly the
-  // region containing the set-code line. When detection fails, the fallback
-  // image-relative crop still covers most real-world framings.
+  // region containing the set-code line. When detection fails (or takes too
+  // long — Firefox flags the page as "slowing down" if any single task
+  // blocks the main thread for >5s), the fallback image-relative crop still
+  // covers most real-world framings.
   onProgress?.({ stage: 'detect-card' });
-  const cardBounds = await detectCardBounds(bitmap).catch(() => null);
+  const cardBounds = await Promise.race([
+    detectCardBounds(bitmap).catch(() => null),
+    new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), DETECT_CARD_TIMEOUT_MS),
+    ),
+  ]);
   onProgress?.({
     stage: 'detect-card',
-    detail: cardBounds ? 'card located' : 'no border found — using fallback crop',
+    detail: cardBounds
+      ? 'card located'
+      : 'no border found — using fallback crop',
   });
 
   const crop: CropBox = cardBounds

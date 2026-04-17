@@ -20,11 +20,20 @@ export interface CropBox {
 }
 
 // Card detection runs Canny + findContours. O(pixels), main-thread, so we
-// downsample first. 1024 on the longest side is plenty of detail for finding
+// downsample first. 640 on the longest side is plenty of detail for finding
 // the card's outer rectangle — we only need edges strong enough to form a
-// contour, not fine text. The detected rect is scaled back to full resolution
-// so the downstream OCR crop still uses native pixels.
-const DETECT_MAX_DIM = 1024;
+// contour, not fine text. 1024 was ~2× slower on Firefox and regularly
+// tripped the "page is slowing down" warning; 640 keeps the main-thread
+// block well under 1s on a mid-range laptop. The detected rect is scaled
+// back to full resolution so the downstream OCR crop still uses native
+// pixels.
+const DETECT_MAX_DIM = 640;
+
+// Hard ceiling on contours we'll inspect. Canny on a noisy photo can emit
+// 10k+ contours and iterating them all (with cv.boundingRect + Mat delete)
+// is what actually pegs the main thread, not Canny itself. 3000 is well
+// past any realistic "outer card rectangle" candidate.
+const MAX_CONTOURS_SCANNED = 3000;
 
 // Pokemon cards are 2.5" × 3.5" (aspect ≈ 0.714 portrait, 1.4 landscape).
 // Real-world photos have perspective skew + rotation so we allow ±25% slack.
@@ -121,7 +130,7 @@ function pickBestCardRect(
 ): CardBounds | null {
   let best: CardBounds | null = null;
   let bestScore = -Infinity;
-  const count = contours.size();
+  const count = Math.min(contours.size(), MAX_CONTOURS_SCANNED);
 
   for (let i = 0; i < count; i++) {
     const c = contours.get(i);
