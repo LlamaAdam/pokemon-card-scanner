@@ -182,6 +182,21 @@ function gradingVerdict(raw, psa10, tier) {
 
 Fees are constants so they're easy to update when PSA adjusts pricing.
 
+### Centering verdict thresholds (`lib/centering.ts`)
+
+Worst-side ratio on the front face drives the verdict (PSA 10 front guideline is ~55/45 or better):
+
+```ts
+function centeringVerdict(lrWorstSide: number, tbWorstSide: number) {
+  const worst = Math.max(lrWorstSide, tbWorstSide); // the more off-center axis
+  if (worst <= 55) return "good";        // ≤ 55/45 — PSA 10 viable
+  if (worst <= 60) return "borderline";  // 55–60 — PSA 9 likely, PSA 10 possible
+  return "poor";                          // > 60 — PSA 10 unrealistic
+}
+```
+
+If the inner frame can't be detected (borderless/full-art, bad photo), verdict is `unmeasurable` and no ratios are reported.
+
 ### External APIs
 
 - **pokemontcg.io** — `/v2/cards?q=name:"Charizard" set.id:sv3pt5 number:185`. Response includes `tcgplayer.prices.holofoil.market` or `normal.market`. Free tier ~20k req/day; API key optional but boosts limits. Store key in a Vercel env var.
