@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest';
+import { beforeEach } from 'vitest';
 
 // localStorage polyfill for jsdom
 class LocalStorageMock {

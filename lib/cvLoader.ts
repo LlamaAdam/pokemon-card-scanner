@@ -1,4 +1,4 @@
-// @ts-expect-error - OpenCV.js attaches `cv` globally at runtime
+// OpenCV.js attaches `cv` globally at runtime; we access it via (window as any).cv.
 let loaded: Promise<any> | null = null;
 
 const CDN = 'https://docs.opencv.org/4.x/opencv.js';

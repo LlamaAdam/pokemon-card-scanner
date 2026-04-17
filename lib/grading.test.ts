@@ -23,7 +23,7 @@ describe('gradingVerdict', () => {
   it('uses regular-tier fees when tier=regular', () => {
     const value = gradingVerdict({ rawPrice: 10, psa10Price: 100, tier: 'value' });
     const regular = gradingVerdict({ rawPrice: 10, psa10Price: 100, tier: 'regular' });
-    expect(regular.netProfit).toBeLessThan(value.netProfit);
+    expect(regular.netProfit).toBeLessThan(value.netProfit!);
   });
 
   it('returns null verdict when psa10Price is null', () => {
