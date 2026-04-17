@@ -29,7 +29,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitest/ui": "^4.1.4",
-    "eslint": "^10.2.0",
+    "eslint": "^9.39.0",
     "eslint-config-next": "^16.2.4",
     "jsdom": "^29.0.2",
     "msw": "^2.13.4",
