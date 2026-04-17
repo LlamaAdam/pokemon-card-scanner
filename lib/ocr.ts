@@ -28,9 +28,21 @@ export interface OcrProgress {
   percent?: number;
 }
 
+// The card's bottom-left corner text ("POR EN 038/088") needs to land inside
+// the crop. A tight 25%×15% corner crop works when the card fills the frame,
+// but real phone photos routinely have the card centered with background
+// padding — in that case, the card's actual bottom-left text sits at roughly
+// (25%, 80%) of the image and the tight crop misses it entirely (OCR reads
+// background).
+//
+// We take a bottom-left half × bottom-third slice instead. The card's
+// bottom-left corner reliably falls inside this region for any reasonable
+// framing, including cards that fill only 50% of the frame. The downstream
+// `fittedDimensions` resize caps the longest side at MAX_OCR_DIMENSION, so a
+// larger crop costs nothing at OCR time — just captures more of the image.
 export function cornerCropBox(dim: { width: number; height: number }): Box {
-  const width = Math.round(dim.width * 0.25);
-  const height = Math.round(dim.height * 0.15);
+  const width = Math.round(dim.width * 0.5);
+  const height = Math.round(dim.height * 0.3);
   const x = 0;
   const y = dim.height - height;
   return { x, y, width, height };
