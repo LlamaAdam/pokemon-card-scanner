@@ -27,6 +27,9 @@ export default function Scan() {
   useEffect(() => {
     setTier(getSettings().psaTier);
     const url = (window as any).__capturedBlobUrl as string | undefined;
+    // Clear the side-channel immediately so a stale URL from a previous
+    // scan can't be replayed if the user navigates to /scan directly.
+    delete (window as any).__capturedBlobUrl;
     if (!url) { router.replace('/'); return; }
     run(url);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -35,6 +38,9 @@ export default function Scan() {
   async function run(blobUrl: string) {
     try {
       const blob = await (await fetch(blobUrl)).blob();
+      // Blob has been materialized into memory; release the object URL
+      // so the underlying File can be garbage-collected.
+      URL.revokeObjectURL(blobUrl);
       setPhase('ocr');
 
       // Kick off OCR and centering in parallel
