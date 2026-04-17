@@ -1,7 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { kv } from '@vercel/kv';
+import { getKv } from '@/lib/kvClient';
 import { priceChartingUrl } from '@/lib/priceChartingUrl';
 import { parsePsa10Price } from '@/lib/priceChartingParser';
+
+const kv = getKv();
 
 const TTL_HIT = 60 * 60 * 24;
 const TTL_MISS = 60 * 60;

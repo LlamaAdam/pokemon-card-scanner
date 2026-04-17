@@ -19,7 +19,7 @@ export interface ScanListEntry {
 const KEY = 'cardscan.scanlist.v1';
 
 function now(): number {
-  return (globalThis as any).__now ?? Date.now();
+  return globalThis.__now ?? Date.now();
 }
 
 function read(): ScanListEntry[] {
@@ -38,7 +38,7 @@ function write(entries: ScanListEntry[]): void {
 }
 
 function uuid(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return (crypto as any).randomUUID();
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === 'x' ? r : (r & 0x3) | 0x8;

@@ -1,16 +1,18 @@
-// OpenCV.js attaches `cv` globally at runtime; we access it via (window as any).cv.
-let loaded: Promise<any> | null = null;
+import type { OpenCv } from './opencvTypes';
+
+// OpenCV.js attaches `cv` globally at runtime; we access it via window.cv.
+let loaded: Promise<OpenCv> | null = null;
 
 const CDN = 'https://docs.opencv.org/4.x/opencv.js';
 
-export function loadOpenCv(): Promise<any> {
+export function loadOpenCv(): Promise<OpenCv> {
   if (typeof window === 'undefined') {
     return Promise.reject(new Error('OpenCV requires a browser environment'));
   }
-  if ((window as any).cv?.Mat) return Promise.resolve((window as any).cv);
+  if (window.cv?.Mat) return Promise.resolve(window.cv);
   if (loaded) return loaded;
 
-  loaded = new Promise((resolve, reject) => {
+  loaded = new Promise<OpenCv>((resolve, reject) => {
     const script = document.createElement('script') as HTMLScriptElement;
     script.src = CDN;
     script.async = true;
@@ -20,7 +22,7 @@ export function loadOpenCv(): Promise<any> {
       // leave callers with a forever-pending promise.
       let attempts = 0;
       const poll = () => {
-        const cv = (window as any).cv;
+        const cv = window.cv;
         if (cv?.Mat) return resolve(cv);
         if (++attempts > 200) {
           loaded = null;
@@ -42,5 +44,5 @@ export function loadOpenCv(): Promise<any> {
 // Test-only reset
 export function __resetCvForTest(): void {
   loaded = null;
-  if (typeof window !== 'undefined') delete (window as any).cv;
+  if (typeof window !== 'undefined') delete window.cv;
 }

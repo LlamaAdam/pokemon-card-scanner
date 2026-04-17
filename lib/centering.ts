@@ -1,4 +1,5 @@
 import { loadOpenCv } from './cvLoader';
+import type { OpenCv, OpenCvMat } from './opencvTypes';
 
 export type CenteringVerdict = 'good' | 'borderline' | 'poor' | 'unmeasurable';
 
@@ -72,7 +73,7 @@ export async function analyzeCentering(imageBlob: Blob): Promise<CenteringResult
   }
 }
 
-function detectInnerFrame(cv: any, src: any): FrameOffsets | null {
+function detectInnerFrame(cv: OpenCv, src: OpenCvMat): FrameOffsets | null {
   const gray = new cv.Mat();
   const edges = new cv.Mat();
   const hierarchy = new cv.Mat();

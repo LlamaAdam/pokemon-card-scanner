@@ -25,10 +25,9 @@ describe('scanList', () => {
 
   it('removes by id', () => {
     const a = addEntry(makeEntry({ name: 'A' }));
-    const b = addEntry(makeEntry({ name: 'B' }));
+    addEntry(makeEntry({ name: 'B' }));
     removeEntry(a.id);
     expect(listEntries().map(e => e.name)).toEqual(['B']);
-    expect(b).toBeTruthy();
   });
 
   it('clears the list', () => {
@@ -39,8 +38,9 @@ describe('scanList', () => {
 
   it('returns entries newest-first', () => {
     const a = addEntry(makeEntry({ name: 'A' }));
-    (globalThis as any).__now = a.scannedAt + 1000;
-    const b = addEntry(makeEntry({ name: 'B' }));
+    globalThis.__now = a.scannedAt + 1000;
+    addEntry(makeEntry({ name: 'B' }));
+    globalThis.__now = undefined;
     expect(listEntries().map(e => e.name)).toEqual(['B', 'A']);
   });
 

@@ -21,7 +21,7 @@ export default function Home() {
   function handleCapture(file: File) {
     // Stash file in sessionStorage-adjacent blob URL and navigate to /scan.
     const url = URL.createObjectURL(file);
-    (window as any).__capturedBlobUrl = url;
+    window.__capturedBlobUrl = url;
     router.push('/scan');
   }
 

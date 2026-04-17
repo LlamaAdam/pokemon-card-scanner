@@ -26,10 +26,10 @@ export default function Scan() {
 
   useEffect(() => {
     setTier(getSettings().psaTier);
-    const url = (window as any).__capturedBlobUrl as string | undefined;
+    const url = window.__capturedBlobUrl;
     // Clear the side-channel immediately so a stale URL from a previous
     // scan can't be replayed if the user navigates to /scan directly.
-    delete (window as any).__capturedBlobUrl;
+    window.__capturedBlobUrl = undefined;
     if (!url) { router.replace('/'); return; }
     run(url);
     // eslint-disable-next-line react-hooks/exhaustive-deps

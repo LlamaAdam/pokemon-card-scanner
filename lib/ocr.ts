@@ -42,7 +42,7 @@ export async function ocrCardCorner(blob: Blob): Promise<OcrResult> {
     await worker.setParameters({
       tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/★☆. ',
       tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
-    } as any);
+    });
     const { data } = await worker.recognize(canvas);
     const parsed = parseCorner(data.text);
     return { ...parsed, rawText: data.text, confidence: data.confidence };

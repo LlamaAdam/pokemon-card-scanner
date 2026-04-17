@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi, type Mock } from 'vitest';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import type { NextApiRequest, NextApiResponse } from 'next';
-import handler from './card';
+import handler from '@/pages/api/card';
 
 const server = setupServer(
   http.get('https://api.pokemontcg.io/v2/cards', () =>
@@ -41,7 +41,7 @@ describe('/api/card', () => {
     const res = mockRes();
     await handler(req, res);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect((res.json as any).mock.calls[0][0]).toMatchObject({ id: 'obf-125', rawPrice: 45 });
+    expect((res.json as unknown as Mock).mock.calls[0][0]).toMatchObject({ id: 'obf-125', rawPrice: 45 });
   });
 
   it('returns 404 when card not found', async () => {
