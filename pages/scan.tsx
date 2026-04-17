@@ -12,6 +12,24 @@ import type { PsaTier } from '@/lib/grading';
 
 type Phase = 'idle' | 'ocr' | 'resolving' | 'ready' | 'error';
 
+// Numbered steps surface progress to the user so they can report exactly which
+// step hangs on mobile (e.g. "stuck on step 3" = Tesseract asset download).
+// The numbering is stable across deploys so support issues stay diagnosable.
+const STEP_LABELS: Record<number, string> = {
+  1: 'Loading captured photo',
+  2: 'Starting OCR engine',
+  3: 'Downloading OCR assets',
+  4: 'Decoding image',
+  5: 'Initializing OCR worker',
+  6: 'OCR worker ready',
+  7: 'Reading card corner',
+  8: 'Finished reading',
+  9: 'Looking up card in TCG database',
+  10: 'Card identified',
+  11: 'Fetching PSA 10 price',
+  12: 'Price received',
+};
+
 export default function Scan() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('idle');
@@ -23,6 +41,18 @@ export default function Scan() {
   const [psa10Loading, setPsa10Loading] = useState(false);
   const [psa10Error, setPsa10Error] = useState<string | null>(null);
   const [tier, setTier] = useState<PsaTier>('value');
+  const [step, setStep] = useState<number>(0);
+  const [stepDetail, setStepDetail] = useState<string>('');
+
+  function setStepNum(n: number, detail?: string) {
+    // Console log as well so Safari remote inspector captures the trail even
+    // if the UI renders something stale.
+    const label = STEP_LABELS[n] ?? 'Unknown';
+    // eslint-disable-next-line no-console
+    console.log(`[scan] Step ${n}: ${label}${detail ? ` (${detail})` : ''}`);
+    setStep(n);
+    setStepDetail(detail ?? '');
+  }
 
   useEffect(() => {
     setTier(getSettings().psaTier);
@@ -37,22 +67,45 @@ export default function Scan() {
 
   async function run(blobUrl: string) {
     try {
+      setPhase('ocr');
+      setStepNum(1);
       const blob = await (await fetch(blobUrl)).blob();
       // Blob has been materialized into memory; release the object URL
       // so the underlying File can be garbage-collected.
       URL.revokeObjectURL(blobUrl);
-      setPhase('ocr');
 
+      setStepNum(2);
       // Kick off OCR and centering in parallel
-      const ocrPromise = ocrCardCorner(blob);
+      const ocrPromise = ocrCardCorner(blob, (p) => {
+        // Map tesseract progress events to numbered steps. Tesseract's own
+        // `status` strings (e.g. "loading tesseract core", "initializing api",
+        // "recognizing text") flow through step 3 as sub-details with percent.
+        if (p.stage === 'load-module') setStepNum(2, 'importing tesseract.js');
+        else if (p.stage === 'decode-image') setStepNum(4);
+        else if (p.stage === 'init-worker') setStepNum(5);
+        else if (p.stage === 'worker-ready') setStepNum(6);
+        else if (p.stage === 'recognize-start') setStepNum(7);
+        else if (p.stage === 'recognize-done') setStepNum(8);
+        else if (p.stage === 'recognize-progress') {
+          // Tesseract's asset download happens during worker init; surface it
+          // as step 3 with a percent so the user can see it actually advancing.
+          const pct = typeof p.percent === 'number' ? Math.round(p.percent * 100) : null;
+          const detail = p.detail
+            ? `${p.detail}${pct != null ? ` ${pct}%` : ''}`
+            : pct != null ? `${pct}%` : '';
+          setStepNum(3, detail);
+        }
+      });
       const centeringPromise = analyzeCentering(blob).catch(() => null);
 
       const ocr = await ocrPromise;
       setIsSecretRare(ocr.isSecretRare);
       setPhase('resolving');
 
+      setStepNum(9);
       const resolved = await resolveFromOcr(ocr);
       if (resolved.status === 'clean') {
+        setStepNum(10, `${resolved.card.name} ${resolved.card.setCode} ${resolved.card.number}`);
         setCard(resolved.card);
         setPhase('ready');
         fetchPsa10(resolved.card);
@@ -73,6 +126,7 @@ export default function Scan() {
 
   async function fetchPsa10(c: NormalizedCard) {
     setPsa10Loading(true); setPsa10Error(null);
+    setStepNum(11);
     try {
       const r = await fetch(
         `/api/psa10?setCode=${encodeURIComponent(c.setCode)}&number=${encodeURIComponent(c.number)}&cardName=${encodeURIComponent(c.name)}`
@@ -82,6 +136,7 @@ export default function Scan() {
       } else {
         const j = await r.json() as { price: number | null; reason?: string };
         setPsa10(j.price);
+        setStepNum(12, j.price != null ? `$${j.price}` : 'no data');
         if (j.price == null && j.reason === 'not_found') setPsa10Error('no data');
       }
     } catch {
@@ -114,9 +169,28 @@ export default function Scan() {
 
       {phase === 'ocr' && <p className="muted">Reading card…</p>}
       {phase === 'resolving' && <p className="muted">Looking up card…</p>}
+      {(phase === 'ocr' || phase === 'resolving') && step > 0 && (
+        <p
+          className="muted"
+          style={{ fontSize: '0.85em', fontVariantNumeric: 'tabular-nums' }}
+          data-testid="scan-step"
+        >
+          Step {step}/12: {STEP_LABELS[step] ?? '…'}
+          {stepDetail && ` — ${stepDetail}`}
+        </p>
+      )}
       {phase === 'error' && (
         <div className="card">
           <p className="danger">{errorMsg}</p>
+          {step > 0 && (
+            <p
+              className="muted"
+              style={{ fontSize: '0.85em', fontVariantNumeric: 'tabular-nums' }}
+            >
+              Stopped at step {step}/12: {STEP_LABELS[step] ?? '…'}
+              {stepDetail && ` — ${stepDetail}`}
+            </p>
+          )}
           <button className="primary" onClick={() => router.push('/')}>Try again</button>
         </div>
       )}
