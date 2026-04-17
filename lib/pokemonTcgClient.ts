@@ -56,7 +56,10 @@ export async function fetchCardByIdentifier(
 ): Promise<NormalizedCard | null> {
   const q = `set.ptcgoCode:${input.setCode} number:${input.number}`;
   const url = `${BASE}/cards?q=${encodeURIComponent(q)}&pageSize=1`;
-  const res = await fetch(url, apiKey ? { headers: { 'X-Api-Key': apiKey } } : undefined);
+  const res = await fetch(url, {
+    ...(apiKey ? { headers: { 'X-Api-Key': apiKey } } : {}),
+    signal: AbortSignal.timeout(5000),
+  });
   if (!res.ok) throw new Error(`pokemontcg.io ${res.status}`);
   const json = await res.json() as { data: RawCard[] };
   return json.data?.[0] ? normalize(json.data[0]) : null;
@@ -65,7 +68,10 @@ export async function fetchCardByIdentifier(
 export async function fetchCardsByName(name: string, apiKey?: string): Promise<NormalizedCard[]> {
   const q = `name:"${name.replace(/"/g, '')}"`;
   const url = `${BASE}/cards?q=${encodeURIComponent(q)}&pageSize=10`;
-  const res = await fetch(url, apiKey ? { headers: { 'X-Api-Key': apiKey } } : undefined);
+  const res = await fetch(url, {
+    ...(apiKey ? { headers: { 'X-Api-Key': apiKey } } : {}),
+    signal: AbortSignal.timeout(5000),
+  });
   if (!res.ok) throw new Error(`pokemontcg.io ${res.status}`);
   const json = await res.json() as { data: RawCard[] };
   return (json.data ?? []).map(normalize);

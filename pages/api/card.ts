@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { fetchCardByIdentifier, fetchCardsByName } from '@/lib/pokemonTcgClient';
 
+function singleParam(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? undefined : v;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -8,7 +12,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const apiKey = process.env.POKEMONTCG_API_KEY || undefined;
-  const { setCode, number, name } = req.query as Record<string, string | undefined>;
+  const setCode = singleParam(req.query.setCode);
+  const number = singleParam(req.query.number);
+  const name = singleParam(req.query.name);
 
   try {
     if (setCode && number) {
@@ -23,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     return res.status(400).json({ error: 'missing_params', detail: 'Provide (setCode, number) or name.' });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'unknown';
-    return res.status(503).json({ error: 'pricing_unavailable', detail: msg });
+    console.error('[card] upstream error', e);
+    return res.status(503).json({ error: 'pricing_unavailable' });
   }
 }
