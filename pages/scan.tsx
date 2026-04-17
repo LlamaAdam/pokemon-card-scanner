@@ -9,6 +9,7 @@ import { getSettings } from '@/lib/settings';
 import type { NormalizedCard } from '@/lib/pokemonTcgClient';
 import type { CenteringResult } from '@/lib/centering';
 import type { PsaTier } from '@/lib/grading';
+import type { OcrResult } from '@/lib/ocr';
 
 type Phase = 'idle' | 'ocr' | 'resolving' | 'ready' | 'error';
 
@@ -43,6 +44,12 @@ export default function Scan() {
   const [tier, setTier] = useState<PsaTier>('value');
   const [step, setStep] = useState<number>(0);
   const [stepDetail, setStepDetail] = useState<string>('');
+  // Captured on failed resolves so the error screen can show the user exactly
+  // what OCR read + how the parser interpreted it. Essential for diagnosing
+  // "Couldn't identify the card" — without it, we're guessing whether the
+  // crop missed the text, Tesseract misread it, or the parser's regexes
+  // failed to match a correctly-read string.
+  const [ocrDebug, setOcrDebug] = useState<OcrResult | null>(null);
 
   function setStepNum(n: number, detail?: string) {
     // Console log as well so Safari remote inspector captures the trail even
@@ -118,9 +125,11 @@ export default function Scan() {
       } else if (resolved.status === 'upstream_error') {
         setPhase('error');
         setErrorMsg('Price service unavailable. Try again shortly.');
+        setOcrDebug(ocr);
       } else {
         setPhase('error');
         setErrorMsg("Couldn't identify the card. Retake the photo with the bottom-left corner in clear focus.");
+        setOcrDebug(ocr);
       }
     } catch (e) {
       // Surface as much as we can. Tesseract.js throws plain objects from
@@ -212,7 +221,47 @@ export default function Scan() {
               {stepDetail && ` — ${stepDetail}`}
             </p>
           )}
-          <button className="primary" onClick={() => router.push('/')}>Try again</button>
+          {ocrDebug && (
+            <details style={{ marginTop: 12, fontSize: '0.85em' }}>
+              <summary className="muted">Debug: what OCR read</summary>
+              <div style={{ marginTop: 8 }}>
+                <div className="muted">Parsed fields:</div>
+                <pre
+                  style={{
+                    background: 'var(--surface, #111)',
+                    padding: 8,
+                    borderRadius: 4,
+                    overflow: 'auto',
+                    fontSize: '0.9em',
+                    margin: '4px 0 12px',
+                  }}
+                >
+{`setCode:        ${ocrDebug.setCode ?? '(null)'}
+number:         ${ocrDebug.number ?? '(null)'}
+total:          ${ocrDebug.total ?? '(null)'}
+language:       ${ocrDebug.language ?? '(null)'}
+regulationMark: ${ocrDebug.regulationMark ?? '(null)'}
+illustrator:    ${ocrDebug.illustrator ?? '(null)'}
+confidence:     ${ocrDebug.confidence.toFixed(1)}`}
+                </pre>
+                <div className="muted">Raw OCR text:</div>
+                <pre
+                  style={{
+                    background: 'var(--surface, #111)',
+                    padding: 8,
+                    borderRadius: 4,
+                    overflow: 'auto',
+                    fontSize: '0.9em',
+                    whiteSpace: 'pre-wrap',
+                    margin: '4px 0',
+                  }}
+                >
+                  {ocrDebug.rawText || '(empty)'}
+                </pre>
+              </div>
+            </details>
+          )}
+          <button className="primary" onClick={() => router.push('/')} style={{ marginTop: 12 }}>Try again</button>
         </div>
       )}
       {phase === 'ready' && card && (
