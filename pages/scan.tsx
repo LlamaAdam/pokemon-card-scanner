@@ -123,9 +123,26 @@ export default function Scan() {
 
       centeringPromise.then(setCentering);
     } catch (e) {
+      // Surface as much as we can. Tesseract.js throws plain objects from
+      // inside its worker (not Error instances), which used to collapse to
+      // a useless "Unknown error" — stringify the whole thing and log it.
+      // eslint-disable-next-line no-console
+      console.error('[scan] caught error during run()', e);
       setPhase('error');
-      setErrorMsg(e instanceof Error ? e.message : 'Unknown error');
+      setErrorMsg(describeError(e));
     }
+  }
+
+  function describeError(e: unknown): string {
+    if (e instanceof Error) return e.message;
+    if (typeof e === 'string') return e;
+    if (e && typeof e === 'object') {
+      const obj = e as Record<string, unknown>;
+      if (typeof obj.message === 'string') return obj.message;
+      if (typeof obj.error === 'string') return obj.error;
+      try { return JSON.stringify(obj); } catch { /* fall through */ }
+    }
+    return 'Unknown error';
   }
 
   async function fetchPsa10(c: NormalizedCard) {

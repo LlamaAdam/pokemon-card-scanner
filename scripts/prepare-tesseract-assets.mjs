@@ -30,14 +30,19 @@ const workerSrc = path.join(
   'worker.min.js',
 );
 
-// We ship both the plain and SIMD LSTM variants. Tesseract.js picks the
-// right one at runtime based on WebAssembly SIMD support in the browser.
-// Non-LSTM variants and asm.js fallbacks are skipped to keep deploys small.
+// Tesseract.js v7 loads the `.wasm.js` Emscripten loader via importScripts,
+// which in turn fetches its sibling `.wasm` binary using the loader's own
+// directory as a base. We ship all three LSTM variants (plain / SIMD /
+// relaxed-SIMD) because tesseract.js-core picks at runtime based on which
+// WASM features the current browser supports. See
+// node_modules/tesseract.js/src/worker-script/browser/getCore.js.
 const coreFiles = [
-  'tesseract-core-lstm.js',
   'tesseract-core-lstm.wasm',
-  'tesseract-core-simd-lstm.js',
+  'tesseract-core-lstm.wasm.js',
   'tesseract-core-simd-lstm.wasm',
+  'tesseract-core-simd-lstm.wasm.js',
+  'tesseract-core-relaxedsimd-lstm.wasm',
+  'tesseract-core-relaxedsimd-lstm.wasm.js',
 ];
 
 const LANG_URL =
