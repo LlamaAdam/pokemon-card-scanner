@@ -117,7 +117,12 @@ async function runOcr(
   const { createWorker, PSM } = await import('tesseract.js');
 
   onProgress?.({ stage: 'decode-image' });
-  const bitmap = await createImageBitmap(blob);
+  // `imageOrientation: 'from-image'` applies the JPEG EXIF orientation tag.
+  // Phone photos routinely ship with orientation=6 (rotate 90° CW on display);
+  // without this option createImageBitmap returns raw landscape pixels and the
+  // card ends up sideways, so our "bottom-left of the card" crop lands on the
+  // copyright line instead of the set-code / collector-number line.
+  const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
 
   // Try card-relative cropping first. If the card detector finds a rectangle
   // with a plausible card aspect ratio, we get a tight crop of exactly the

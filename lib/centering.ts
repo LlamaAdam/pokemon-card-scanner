@@ -71,7 +71,9 @@ export async function analyzeCentering(imageBlob: Blob): Promise<CenteringResult
   if (typeof window === 'undefined') return null;
   const cv = await loadOpenCv();
 
-  const bitmap = await createImageBitmap(imageBlob);
+  // Match OCR: honor JPEG EXIF orientation so rotated phone photos map to
+  // portrait bitmap coordinates before contour detection.
+  const bitmap = await createImageBitmap(imageBlob, { imageOrientation: 'from-image' });
   const fitted = fittedDimensions(
     { width: bitmap.width, height: bitmap.height },
     MAX_CENTERING_DIMENSION,
