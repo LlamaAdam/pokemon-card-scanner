@@ -67,4 +67,28 @@ export const CORNER_FIXTURES: CornerFixture[] = [
       illustrator: null, isSecretRare: false,
     },
   },
+  {
+    // Real-world failure: kerning between the set stamp and language tag is
+    // tight on printed cards, and Tesseract routinely reads "POR EN" as
+    // "POREN" on low-resolution scans. The parser must still pull set+lang.
+    label: 'Merged set code and language (POREN)',
+    ocrText: 'Illus. kawayoo\nG    POREN\n045/088',
+    expected: {
+      setCode: 'POR', number: '045', total: '088',
+      regulationMark: 'G', language: 'EN',
+      illustrator: 'kawayoo', isSecretRare: false,
+    },
+  },
+  {
+    // Real-world failure: the '/' glyph on the collector-number line is often
+    // read as a space or a stray digit. When two 3-digit groups appear
+    // adjacent, treat them as number/total.
+    label: 'Collector number with missing slash',
+    ocrText: 'Illus. Naoki Saito\nG    POR EN\n004 088',
+    expected: {
+      setCode: 'POR', number: '004', total: '088',
+      regulationMark: 'G', language: 'EN',
+      illustrator: 'Naoki Saito', isSecretRare: false,
+    },
+  },
 ];

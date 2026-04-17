@@ -93,6 +93,7 @@ export default function Scan() {
       const ocr = await ocrCardCorner(blob, (p) => {
         if (p.stage === 'load-module') setStepNum(2, 'importing tesseract.js');
         else if (p.stage === 'decode-image') setStepNum(4);
+        else if (p.stage === 'detect-card') setStepNum(4, p.detail ?? 'locating card edges');
         else if (p.stage === 'init-worker') setStepNum(5);
         else if (p.stage === 'worker-ready') setStepNum(6);
         else if (p.stage === 'recognize-start') { recognizing = true; setStepNum(7); }

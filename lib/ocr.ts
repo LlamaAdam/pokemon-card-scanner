@@ -1,5 +1,6 @@
 import type { CornerParseResult } from './cornerParser';
 import { parseCorner } from './cornerParser';
+import { detectCardBounds, cardCornerBox, type CropBox } from './cardDetect';
 
 export interface OcrResult extends CornerParseResult {
   rawText: string;
@@ -19,6 +20,7 @@ export interface OcrProgress {
   stage:
     | 'load-module'
     | 'decode-image'
+    | 'detect-card'
     | 'init-worker'
     | 'worker-ready'
     | 'recognize-start'
@@ -28,18 +30,12 @@ export interface OcrProgress {
   percent?: number;
 }
 
-// The card's bottom-left corner text ("POR EN 038/088") needs to land inside
-// the crop. A tight 25%×15% corner crop works when the card fills the frame,
-// but real phone photos routinely have the card centered with background
-// padding — in that case, the card's actual bottom-left text sits at roughly
-// (25%, 80%) of the image and the tight crop misses it entirely (OCR reads
-// background).
-//
-// We take a bottom-left half × bottom-third slice instead. The card's
-// bottom-left corner reliably falls inside this region for any reasonable
-// framing, including cards that fill only 50% of the frame. The downstream
-// `fittedDimensions` resize caps the longest side at MAX_OCR_DIMENSION, so a
-// larger crop costs nothing at OCR time — just captures more of the image.
+// Fallback image-relative crop when we can't detect the card's bounding box
+// (OpenCV load failed, no contour matched card aspect ratio, etc.). A
+// bottom-left half × bottom-third slice catches the card's corner for any
+// reasonable framing where the card fills roughly half the frame. Tighter
+// crops used to miss padded photos entirely; looser crops pull in too much
+// noise from the attack text and the background.
 export function cornerCropBox(dim: { width: number; height: number }): Box {
   const width = Math.round(dim.width * 0.5);
   const height = Math.round(dim.height * 0.3);
@@ -48,12 +44,12 @@ export function cornerCropBox(dim: { width: number; height: number }): Box {
   return { x, y, width, height };
 }
 
-// Tesseract recommends ~300 DPI, which for the ~0.7" wide collector-number
-// line is around 210 px wide. Modern phone cameras produce corners that are
-// 1000+ px wide — overkill, and the recognize pass scales ~linearly with
-// pixel count. Cap the longest side so a 4000×3000 phone photo produces a
-// manageable canvas without hurting accuracy on the printed digits.
-const MAX_OCR_DIMENSION = 800;
+// Target pixel resolution for the crop handed to Tesseract. 1600 px on the
+// longest side gives ~60–80 px set-code text once the crop is tight to the
+// card's bottom-left corner, which is comfortably inside Tesseract's sweet
+// spot. We only downsample when the source crop is larger than this; small
+// crops stay at native resolution to avoid bilinear upscale blur.
+const MAX_OCR_DIMENSION = 1600;
 
 // A 90s ceiling on the whole OCR pipeline. Worker init + asset download +
 // recognize should comfortably finish in well under a minute on any network;
@@ -75,12 +71,18 @@ function fittedDimensions(
 
 /**
  * Run Tesseract on the bottom-left corner of the image (browser-only).
- * Falls back to the whole image if the corner yields nothing parseable.
+ *
+ * Flow: decode the photo → detect the card's outer rectangle via OpenCV
+ * contour matching → crop tightly to the card's bottom-left corner (the
+ * set code / collector number / illustrator line) → scale that crop to a
+ * target resolution and hand it to Tesseract. When card detection fails,
+ * we fall back to an image-relative crop so Tesseract still gets something
+ * reasonable to read.
  *
  * Accepts an optional `onProgress` callback so callers can surface fine-grained
- * stages (module import, worker init, recognize %) to the UI. This is important
- * on mobile networks where the first-load ~8MB WASM + language-data download
- * can make the "Reading card…" phase look hung.
+ * stages (module import, card detect, worker init, recognize %) to the UI.
+ * This is important on mobile networks where the first-load ~8MB WASM +
+ * language-data download can make the "Reading card…" phase look hung.
  */
 export async function ocrCardCorner(
   blob: Blob,
@@ -116,18 +118,44 @@ async function runOcr(
 
   onProgress?.({ stage: 'decode-image' });
   const bitmap = await createImageBitmap(blob);
-  const box = cornerCropBox({ width: bitmap.width, height: bitmap.height });
-  const fitted = fittedDimensions({ width: box.width, height: box.height }, MAX_OCR_DIMENSION);
 
-  // Draw the cropped region directly at the fitted (possibly downsampled)
-  // size. drawImage's 9-arg form resamples with the browser's built-in
-  // bilinear filter, which is more than good enough for collector-number
-  // text and avoids a separate downsample pass.
+  // Try card-relative cropping first. If the card detector finds a rectangle
+  // with a plausible card aspect ratio, we get a tight crop of exactly the
+  // region containing the set-code line. When detection fails, the fallback
+  // image-relative crop still covers most real-world framings.
+  onProgress?.({ stage: 'detect-card' });
+  const cardBounds = await detectCardBounds(bitmap).catch(() => null);
+  onProgress?.({
+    stage: 'detect-card',
+    detail: cardBounds ? 'card located' : 'no border found — using fallback crop',
+  });
+
+  const crop: CropBox = cardBounds
+    ? cardCornerBox(cardBounds)
+    : cornerCropBox({ width: bitmap.width, height: bitmap.height });
+
+  // Clamp to bitmap bounds — detected rectangles can occasionally extend a
+  // pixel past the image edge due to rounding and downsample-scale-back.
+  const safe = clampToBitmap(crop, bitmap.width, bitmap.height);
+
+  const fitted = fittedDimensions(
+    { width: safe.width, height: safe.height },
+    MAX_OCR_DIMENSION,
+  );
+
+  // Draw the cropped region directly at the fitted size. drawImage's 9-arg
+  // form resamples with the browser's built-in bilinear filter, which is
+  // more than good enough for collector-number text and avoids a separate
+  // downsample pass.
   const canvas = document.createElement('canvas');
   canvas.width = fitted.width;
   canvas.height = fitted.height;
   const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(bitmap, box.x, box.y, box.width, box.height, 0, 0, fitted.width, fitted.height);
+  ctx.drawImage(
+    bitmap,
+    safe.x, safe.y, safe.width, safe.height,
+    0, 0, fitted.width, fitted.height,
+  );
 
   onProgress?.({ stage: 'init-worker' });
   // Self-hosted paths: assets live under /public/tesseract/, populated at
@@ -165,4 +193,12 @@ async function runOcr(
   } finally {
     await worker.terminate();
   }
+}
+
+function clampToBitmap(crop: CropBox, bw: number, bh: number): CropBox {
+  const x = Math.max(0, Math.min(crop.x, bw - 1));
+  const y = Math.max(0, Math.min(crop.y, bh - 1));
+  const width = Math.max(1, Math.min(crop.width, bw - x));
+  const height = Math.max(1, Math.min(crop.height, bh - y));
+  return { x, y, width, height };
 }
