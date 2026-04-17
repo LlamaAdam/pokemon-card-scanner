@@ -47,16 +47,40 @@ export function centeringVerdict(lrWorst: number, tbWorst: number): CenteringVer
   return 'poor';
 }
 
+// Phone photos are routinely 3000–4000 px on the long edge. Canny +
+// findContours are O(pixels) and block the main thread, so we downsample
+// first. 1024 px on the long edge preserves enough edge detail for the
+// card-frame detector while keeping the whole pass under a second on a
+// mid-range phone.
+const MAX_CENTERING_DIMENSION = 1024;
+
+function fittedDimensions(
+  src: { width: number; height: number },
+  max: number,
+): { width: number; height: number } {
+  const longest = Math.max(src.width, src.height);
+  if (longest <= max) return { width: src.width, height: src.height };
+  const scale = max / longest;
+  return {
+    width: Math.max(1, Math.round(src.width * scale)),
+    height: Math.max(1, Math.round(src.height * scale)),
+  };
+}
+
 export async function analyzeCentering(imageBlob: Blob): Promise<CenteringResult | null> {
   if (typeof window === 'undefined') return null;
   const cv = await loadOpenCv();
 
   const bitmap = await createImageBitmap(imageBlob);
+  const fitted = fittedDimensions(
+    { width: bitmap.width, height: bitmap.height },
+    MAX_CENTERING_DIMENSION,
+  );
   const canvas = document.createElement('canvas');
-  canvas.width = bitmap.width;
-  canvas.height = bitmap.height;
+  canvas.width = fitted.width;
+  canvas.height = fitted.height;
   const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(bitmap, 0, 0);
+  ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, fitted.width, fitted.height);
 
   const src = cv.imread(canvas);
   try {

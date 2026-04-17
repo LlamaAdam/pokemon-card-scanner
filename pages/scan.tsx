@@ -75,14 +75,15 @@ export default function Scan() {
       URL.revokeObjectURL(blobUrl);
 
       setStepNum(2);
-      // Kick off OCR and centering in parallel.
-      // Tesseract's logger fires `recognize-progress` events for two distinct
-      // phases: (a) during worker init it reports asset download + API setup,
-      // (b) during the recognize pass it reports OCR progress. We track which
-      // phase we're in so the same event source doesn't appear to "jump back"
-      // from step 7 to step 3.
+      // Run OCR first, centering after. Centering loads a ~10MB OpenCV.js
+      // bundle and runs synchronous imread/Canny/findContours on the full
+      // image, which pegs the main thread and starves Tesseract's worker →
+      // main thread message pump. Running them in parallel caused step 5
+      // ("Initializing OCR worker") to appear stuck forever on mobile while
+      // OpenCV monopolized the main thread. Deferring centering until after
+      // the card is identified keeps OCR progress events flowing.
       let recognizing = false;
-      const ocrPromise = ocrCardCorner(blob, (p) => {
+      const ocr = await ocrCardCorner(blob, (p) => {
         if (p.stage === 'load-module') setStepNum(2, 'importing tesseract.js');
         else if (p.stage === 'decode-image') setStepNum(4);
         else if (p.stage === 'init-worker') setStepNum(5);
@@ -100,9 +101,6 @@ export default function Scan() {
           setStepNum(recognizing ? 7 : 3, detail);
         }
       });
-      const centeringPromise = analyzeCentering(blob).catch(() => null);
-
-      const ocr = await ocrPromise;
       setIsSecretRare(ocr.isSecretRare);
       setPhase('resolving');
 
@@ -113,6 +111,10 @@ export default function Scan() {
         setCard(resolved.card);
         setPhase('ready');
         fetchPsa10(resolved.card);
+        // Kick off centering analysis once the card is on screen. This runs
+        // async and updates the UI when it finishes; the user doesn't wait
+        // on it to see the card result.
+        analyzeCentering(blob).catch(() => null).then(setCentering);
       } else if (resolved.status === 'upstream_error') {
         setPhase('error');
         setErrorMsg('Price service unavailable. Try again shortly.');
@@ -120,8 +122,6 @@ export default function Scan() {
         setPhase('error');
         setErrorMsg("Couldn't identify the card. Retake the photo with the bottom-left corner in clear focus.");
       }
-
-      centeringPromise.then(setCentering);
     } catch (e) {
       // Surface as much as we can. Tesseract.js throws plain objects from
       // inside its worker (not Error instances), which used to collapse to
