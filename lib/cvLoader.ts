@@ -16,14 +16,24 @@ export function loadOpenCv(): Promise<any> {
     script.async = true;
     script.onload = () => {
       // OpenCV fires onload before WASM runtime finishes initializing.
+      // Cap the wait at ~10s (200 × 50ms) so a silent WASM failure doesn't
+      // leave callers with a forever-pending promise.
+      let attempts = 0;
       const poll = () => {
         const cv = (window as any).cv;
         if (cv?.Mat) return resolve(cv);
+        if (++attempts > 200) {
+          loaded = null;
+          return reject(new Error('OpenCV.js runtime init timeout'));
+        }
         setTimeout(poll, 50);
       };
       poll();
     };
-    script.onerror = () => reject(new Error('Failed to load OpenCV.js'));
+    script.onerror = () => {
+      loaded = null;
+      reject(new Error('Failed to load OpenCV.js'));
+    };
     document.head.appendChild(script);
   });
   return loaded;
