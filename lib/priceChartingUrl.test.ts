@@ -23,7 +23,19 @@ describe('priceChartingUrl', () => {
   });
 
   it('SET_SLUG_MAP covers common modern sets', () => {
-    const expected = ['OBF', 'PAR', 'MEW', 'PAF', 'TEF', 'TWM', 'SFA', 'SCR', 'SSP', 'POR'];
+    const expected = ['OBF', 'PAR', 'MEW', 'PAF', 'TEF', 'TWM', 'SFA', 'SCR', 'SSP', 'POR', 'PRE'];
     for (const code of expected) expect(SET_SLUG_MAP[code]).toBeTypeOf('string');
+  });
+
+  it('POR maps to perfect-order, not prismatic-evolutions (regression)', () => {
+    // pokemontcg.io ptcgoCode POR is the Mar-2026 set "Perfect Order" (me3).
+    // Prismatic Evolutions (sv8pt5) uses ptcgoCode PRE. These must not swap.
+    expect(SET_SLUG_MAP.POR).toBe('perfect-order');
+    expect(SET_SLUG_MAP.PRE).toBe('prismatic-evolutions');
+  });
+
+  it('builds the correct pricecharting URL for Snivy 004/088 from Perfect Order', () => {
+    const url = priceChartingUrl({ setCode: 'POR', number: '004', cardName: 'Snivy' });
+    expect(url).toBe('https://www.pricecharting.com/game/pokemon-perfect-order/snivy-4');
   });
 });

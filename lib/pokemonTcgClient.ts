@@ -54,7 +54,14 @@ export async function fetchCardByIdentifier(
   input: { setCode: string; number: string },
   apiKey?: string,
 ): Promise<NormalizedCard | null> {
-  const q = `set.ptcgoCode:${input.setCode} number:${input.number}`;
+  // pokemontcg.io stores collector numbers without leading zeros (e.g. "4",
+  // not "004"), but OCR on the card face reads the printed form "004/088".
+  // Strip leading zeros so both forms resolve to the same card. Non-numeric
+  // suffixes like "TG01" or "SV001" are preserved verbatim.
+  const normalizedNumber = /^\d+$/.test(input.number)
+    ? input.number.replace(/^0+/, '') || '0'
+    : input.number;
+  const q = `set.ptcgoCode:${input.setCode} number:${normalizedNumber}`;
   const url = `${BASE}/cards?q=${encodeURIComponent(q)}&pageSize=1`;
   const res = await fetch(url, {
     ...(apiKey ? { headers: { 'X-Api-Key': apiKey } } : {}),
