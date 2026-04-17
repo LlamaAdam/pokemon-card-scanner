@@ -75,25 +75,29 @@ export default function Scan() {
       URL.revokeObjectURL(blobUrl);
 
       setStepNum(2);
-      // Kick off OCR and centering in parallel
+      // Kick off OCR and centering in parallel.
+      // Tesseract's logger fires `recognize-progress` events for two distinct
+      // phases: (a) during worker init it reports asset download + API setup,
+      // (b) during the recognize pass it reports OCR progress. We track which
+      // phase we're in so the same event source doesn't appear to "jump back"
+      // from step 7 to step 3.
+      let recognizing = false;
       const ocrPromise = ocrCardCorner(blob, (p) => {
-        // Map tesseract progress events to numbered steps. Tesseract's own
-        // `status` strings (e.g. "loading tesseract core", "initializing api",
-        // "recognizing text") flow through step 3 as sub-details with percent.
         if (p.stage === 'load-module') setStepNum(2, 'importing tesseract.js');
         else if (p.stage === 'decode-image') setStepNum(4);
         else if (p.stage === 'init-worker') setStepNum(5);
         else if (p.stage === 'worker-ready') setStepNum(6);
-        else if (p.stage === 'recognize-start') setStepNum(7);
+        else if (p.stage === 'recognize-start') { recognizing = true; setStepNum(7); }
         else if (p.stage === 'recognize-done') setStepNum(8);
         else if (p.stage === 'recognize-progress') {
-          // Tesseract's asset download happens during worker init; surface it
-          // as step 3 with a percent so the user can see it actually advancing.
           const pct = typeof p.percent === 'number' ? Math.round(p.percent * 100) : null;
           const detail = p.detail
             ? `${p.detail}${pct != null ? ` ${pct}%` : ''}`
             : pct != null ? `${pct}%` : '';
-          setStepNum(3, detail);
+          // Pre-recognize events ride step 3 (assets/worker bring-up);
+          // recognize-pass events ride step 7 so the numeric step never
+          // regresses.
+          setStepNum(recognizing ? 7 : 3, detail);
         }
       });
       const centeringPromise = analyzeCentering(blob).catch(() => null);
