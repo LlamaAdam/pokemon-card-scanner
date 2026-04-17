@@ -1,0 +1,33 @@
+{
+  "name": "pokemon-card-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@vercel/kv": "^3.0.0",
+    "next": "14.2.35",
+    "react": "^18",
+    "react-dom": "^18",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@vitest/ui": "^4.1.4",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.35",
+    "jsdom": "^29.0.2",
+    "msw": "^2.13.4",
+    "typescript": "^5",
+    "vitest": "^4.1.4"
+  }
+}
