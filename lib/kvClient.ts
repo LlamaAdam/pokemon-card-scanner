@@ -1,7 +1,11 @@
-// Thin wrapper around @vercel/kv that falls back to an in-process Map when
-// KV_REST_API_URL / KV_REST_API_TOKEN are not set. This lets local `npm run dev`
-// work without linking a Vercel KV store; cache is per-process and does not
+// Thin wrapper around @upstash/redis that falls back to an in-process Map
+// when no Upstash credentials are set. This lets local `npm run dev` work
+// without a real Redis; the in-memory cache is per-process and does not
 // survive restarts, but the app stays functional.
+//
+// Accepts either the Upstash-native env names (UPSTASH_REDIS_REST_URL /
+// UPSTASH_REDIS_REST_TOKEN) or the legacy Vercel KV names (KV_REST_API_URL /
+// KV_REST_API_TOKEN) so existing Vercel deployments keep working.
 
 export interface KvLike {
   get<T = unknown>(key: string): Promise<T | null>;
@@ -17,8 +21,9 @@ function createMemoryKv(): KvLike {
     async get<T = unknown>(key: string): Promise<T | null> {
       if (!warned) {
         console.warn(
-          '[kv] KV_REST_API_URL / KV_REST_API_TOKEN not set — using in-memory fallback. ' +
-          'Cache does not persist across restarts. Link a Vercel KV store for production.',
+          '[kv] No Upstash Redis credentials set (UPSTASH_REDIS_REST_URL / ' +
+          'UPSTASH_REDIS_REST_TOKEN, or legacy KV_REST_API_URL / KV_REST_API_TOKEN) — ' +
+          'using in-memory fallback. Cache does not persist across restarts.',
         );
         warned = true;
       }
@@ -37,16 +42,37 @@ function createMemoryKv(): KvLike {
   };
 }
 
+function getConfiguredCreds(): { url: string; token: string } | null {
+  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return { url, token };
+}
+
+interface UpstashSetOpts { ex?: number }
+interface UpstashRedis {
+  get<T = unknown>(key: string): Promise<T | null>;
+  set(key: string, value: unknown, opts?: UpstashSetOpts): Promise<unknown>;
+}
+
 let cached: KvLike | null = null;
 
 export function getKv(): KvLike {
   if (cached) return cached;
-  const configured = Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
-  if (configured) {
-    // Lazy require so environments without KV don't load @vercel/kv at all.
+  const creds = getConfiguredCreds();
+  if (creds) {
+    // Lazy require so environments without Upstash don't load the SDK at all.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('@vercel/kv') as { kv: KvLike };
-    cached = mod.kv;
+    const mod = require('@upstash/redis') as { Redis: new (c: { url: string; token: string }) => UpstashRedis };
+    const client = new mod.Redis({ url: creds.url, token: creds.token });
+    cached = {
+      async get<T = unknown>(key: string): Promise<T | null> {
+        return client.get<T>(key);
+      },
+      async set(key: string, value: unknown, opts?: { ex?: number }): Promise<void> {
+        await client.set(key, value, opts?.ex != null ? { ex: opts.ex } : undefined);
+      },
+    };
   } else {
     cached = createMemoryKv();
   }
